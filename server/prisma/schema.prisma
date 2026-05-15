@@ -1,0 +1,78 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Customer {
+  id        String   @id @default(cuid())
+  name      String
+  phone     String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  orders    Order[]
+}
+
+enum OrderStatus {
+  DRAFT
+  VERIFIED
+  CANCELLED
+}
+
+model Order {
+  id             String      @id @default(cuid())
+  customerId     String
+  customer       Customer    @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  pincode        String?
+  city           String?
+  state          String?
+  area           String?
+  roadSociety    String?
+  landmark       String?
+  houseNumber    String?
+  serviceable    Boolean     @default(true)
+  deliveryChance Float?
+  riskLevel      String?
+  status         OrderStatus @default(DRAFT)
+  notes          String?
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+  riskLogs       AIRiskLog[]
+}
+
+model DeliveryAnalytics {
+  id              String   @id @default(cuid())
+  pincode         String
+  areaKey         String
+  areaLabel       String
+  deliveredOrders Int      @default(0)
+  rtoOrders       Int      @default(0)
+  updatedAt       DateTime @updatedAt
+
+  @@unique([pincode, areaKey])
+  @@index([pincode])
+}
+
+model AIRiskLog {
+  id        String   @id @default(cuid())
+  orderId   String?
+  order     Order?   @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  level     String
+  message   String
+  detail    Json?
+  createdAt DateTime @default(now())
+
+  @@index([orderId])
+}
+
+model PincodeLocality {
+  id        String @id @default(cuid())
+  pincode   String
+  locality  String
+  sortOrder Int    @default(0)
+
+  @@index([pincode])
+}

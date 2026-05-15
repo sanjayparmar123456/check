@@ -1,0 +1,23 @@
+# Dependencies
+node_modules/
+
+# Env & secrets
+.env
+.env.*
+!.env.example
+server/.env
+web/.env.local
+
+# Build
+dist/
+.next/
+out/
+
+# OS / IDE
+.DS_Store
+Thumbs.db
+*.log
+.cursor/
+
+# Prisma
+server/node_modules/.prisma/

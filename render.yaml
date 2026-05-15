@@ -1,0 +1,29 @@
+# Deploy on https://render.com — connect this repo, add env vars in dashboard
+services:
+  - type: web
+    name: cod-crm-api
+    runtime: node
+    rootDir: server
+    buildCommand: npm install && npx prisma generate && npm run build
+    startCommand: npx prisma db push && npm run db:seed && npm start
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: DATABASE_URL
+        fromDatabase:
+          name: cod-crm-db
+          property: connectionString
+      - key: CORS_ORIGIN
+        sync: false
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: GOOGLE_MAPS_API_KEY
+        sync: false
+      - key: GOOGLE_ADDRESS_VALIDATION_KEY
+        sync: false
+
+databases:
+  - name: cod-crm-db
+    plan: free
+    databaseName: cod_crm
+    user: cod_crm
