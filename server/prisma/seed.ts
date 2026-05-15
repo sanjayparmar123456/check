@@ -13,6 +13,8 @@ async function main() {
     "Sama",
     "Old Chhani Road",
     "Old Chhani Jakat Naka",
+    "Chhani",
+    "New Sama",
     "Ram Nagar",
     "Ram Vatika",
   ];
@@ -38,6 +40,13 @@ async function main() {
         areaLabel: "Nizampura",
         deliveredOrders: 400,
         rtoOrders: 120,
+      },
+      {
+        pincode: p390,
+        areaKey: `${p390}|sama`,
+        areaLabel: "Sama",
+        deliveredOrders: 650,
+        rtoOrders: 90,
       },
     ],
   });

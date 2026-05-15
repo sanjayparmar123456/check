@@ -6,9 +6,17 @@ import { prisma } from "./lib/db.js";
 import { buildLiveAssist } from "./services/assistService.js";
 
 const app = express();
+const allowedOrigins = env.corsOrigin.split(",").map((s) => s.trim());
+
 app.use(
   cors({
-    origin: env.corsOrigin.split(",").map((s) => s.trim()),
+    origin(origin, callback) {
+      if (!origin) return callback(null, true);
+      if (allowedOrigins.includes("*")) return callback(null, true);
+      if (allowedOrigins.includes(origin)) return callback(null, true);
+      if (origin.endsWith(".vercel.app")) return callback(null, true);
+      callback(new Error("CORS blocked"));
+    },
     credentials: true,
   })
 );
