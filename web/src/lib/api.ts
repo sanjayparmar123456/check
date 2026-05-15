@@ -21,7 +21,8 @@ export type LiveAssistResponse = {
   } | null;
 };
 
-const base = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
+/** Same-origin `/api/*` — proxied to backend via next.config rewrites */
+const API = "/api";
 
 export async function postLiveAssist(body: {
   pincode: string;
@@ -32,7 +33,7 @@ export async function postLiveAssist(body: {
   statedCity?: string;
   activeField: ActiveField;
 }): Promise<LiveAssistResponse> {
-  const res = await fetch(`${base}/api/assist/live`, {
+  const res = await fetch(`${API}/assist/live`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
@@ -42,7 +43,7 @@ export async function postLiveAssist(body: {
 }
 
 export async function createCustomer(data: { name: string; phone: string }) {
-  const res = await fetch(`${base}/api/customers`, {
+  const res = await fetch(`${API}/customers`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(data),
@@ -52,7 +53,7 @@ export async function createCustomer(data: { name: string; phone: string }) {
 }
 
 export async function createOrder(customerId: string) {
-  const res = await fetch(`${base}/api/orders`, {
+  const res = await fetch(`${API}/orders`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ customerId }),
@@ -61,11 +62,8 @@ export async function createOrder(customerId: string) {
   return res.json() as Promise<{ id: string }>;
 }
 
-export async function patchOrder(
-  id: string,
-  data: Record<string, unknown>
-) {
-  const res = await fetch(`${base}/api/orders/${id}`, {
+export async function patchOrder(id: string, data: Record<string, unknown>) {
+  const res = await fetch(`${API}/orders/${id}`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(data),

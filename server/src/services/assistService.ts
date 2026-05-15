@@ -1,5 +1,6 @@
 import { prisma } from "../lib/db.js";
-import { pincodeFallback } from "../data/pincodeFallback.js";
+import { safeDbQuery } from "../lib/safeDb.js";
+import { pincodeFallback, type AreaStats } from "../data/pincodeFallback.js";
 import {
   geocodePincode,
   placesAutocomplete,
@@ -84,10 +85,14 @@ export async function buildLiveAssist(input: LiveAssistInput): Promise<LiveAssis
   const serviceable = fb?.serviceable ?? true;
 
   const dbLocals = pincodeOk
-    ? await prisma.pincodeLocality.findMany({
-        where: { pincode: pin },
-        orderBy: { sortOrder: "asc" },
-      })
+    ? await safeDbQuery(
+        () =>
+          prisma.pincodeLocality.findMany({
+            where: { pincode: pin },
+            orderBy: { sortOrder: "asc" },
+          }),
+        []
+      )
     : [];
 
   const baseAreas = Array.from(
@@ -153,18 +158,29 @@ export async function buildLiveAssist(input: LiveAssistInput): Promise<LiveAssis
 
   const analyticsRows =
     pincodeOk && input.area.trim()
-      ? await prisma.deliveryAnalytics.findMany({
-          where: { pincode: pin },
-        })
+      ? await safeDbQuery(
+          () => prisma.deliveryAnalytics.findMany({ where: { pincode: pin } }),
+          []
+        )
       : [];
 
-  const row =
+  const dbRow =
     analyticsRows.find((r) => r.areaKey === areaKey(pin, input.area)) ??
     analyticsRows.find((r) => norm(r.areaLabel).includes(norm(input.area)));
 
+  let fallbackStats: AreaStats | undefined;
+  if (!dbRow && fb?.areaStats && input.area.trim()) {
+    const key = norm(input.area);
+    fallbackStats =
+      fb.areaStats[key] ??
+      Object.entries(fb.areaStats).find(([k]) => key.includes(k) || k.includes(key))?.[1];
+  }
+
+  const stats = dbRow ?? fallbackStats;
+
   let deliveryRate: number | null = null;
-  if (row && row.deliveredOrders + row.rtoOrders > 0) {
-    deliveryRate = row.deliveredOrders / (row.deliveredOrders + row.rtoOrders);
+  if (stats && stats.deliveredOrders + stats.rtoOrders > 0) {
+    deliveryRate = stats.deliveredOrders / (stats.deliveredOrders + stats.rtoOrders);
   }
 
   let deliveryChance: number | null = blendDeliveryFromRate(deliveryRate);
@@ -224,8 +240,8 @@ export async function buildLiveAssist(input: LiveAssistInput): Promise<LiveAssis
     riskMessages.push("Google Address Validation flagged possible issues.");
   }
 
-  const analyticsSnippet = row
-    ? `Area analytics: ${row.areaLabel} — delivered ${row.deliveredOrders}, RTO ${row.rtoOrders}.`
+  const analyticsSnippet = stats
+    ? `Area analytics: ${stats.areaLabel} — delivered ${stats.deliveredOrders}, RTO ${stats.rtoOrders}.`
     : "No historical analytics row for this exact area yet.";
 
   const llm = await runAssistLlm({

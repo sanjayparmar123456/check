@@ -44,8 +44,9 @@ app.post("/api/assist/live", async (req, res) => {
     });
     res.json(result);
   } catch (e) {
-    console.error(e);
-    res.status(400).json({ error: "Invalid request" });
+    console.error("[assist/live]", e);
+    const message = e instanceof Error ? e.message : "Assist failed";
+    res.status(500).json({ error: message });
   }
 });
 
