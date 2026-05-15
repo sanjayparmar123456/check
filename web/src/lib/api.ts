@@ -19,6 +19,7 @@ export type LiveAssistResponse = {
   possibleAreas: string[];
   nearbyServiceableLocations: string[];
   areaSuggestions: string[];
+  roadSuggestions: string[];
   landmarkSuggestions: string[];
   autocompleteSuggestions: string[];
   areaMatch: boolean | null;

@@ -63,12 +63,10 @@ export default function Home() {
     setAssistLoading(true);
     setAssistError(null);
     try {
-      const field =
-        pinComplete && !area.trim() && !roadSociety.trim() && !landmark.trim()
-          ? "pincode"
-          : activeField === "none" && pinComplete
-            ? "pincode"
-            : activeField;
+      let field = activeField;
+      if (pinComplete && !area.trim()) field = "pincode";
+      else if (area.trim() && activeField !== "area" && activeField !== "landmark") field = "road";
+      else if (activeField === "none" && pinComplete) field = "pincode";
       const r = await postLiveAssist({
         pincode,
         area,
@@ -102,6 +100,13 @@ export default function Home() {
   const pickArea = (v: string) => {
     setArea(v);
     setActiveField("road");
+    setTimeout(() => void refreshAssist(), 50);
+  };
+
+  const pickRoad = (v: string) => {
+    setRoadSociety(v);
+    setActiveField("landmark");
+    setTimeout(() => void refreshAssist(), 50);
   };
 
   const startSession = async () => {
@@ -300,7 +305,7 @@ export default function Home() {
           activeField={activeField}
           step={step}
           onPickArea={pickArea}
-          onPickRoad={setRoadSociety}
+          onPickRoad={pickRoad}
           onPickLandmark={setLandmark}
         />
       </main>

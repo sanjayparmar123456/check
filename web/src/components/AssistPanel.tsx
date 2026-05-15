@@ -151,7 +151,7 @@ export function AssistPanel({
 
       <div className="rounded-xl border-2 border-indigo-200 bg-indigo-50/50 p-4 dark:border-indigo-800 dark:bg-indigo-950/30">
         <p className="text-xs font-bold uppercase text-indigo-600">Suggested (auto)</p>
-        {assist?.detectedCity && (
+        {step <= 2 && assist?.detectedCity && (
           <p className="mt-2 text-sm">
             <span className="text-zinc-500">City: </span>
             <span className="font-bold text-indigo-900 dark:text-indigo-100">
@@ -160,12 +160,35 @@ export function AssistPanel({
             </span>
           </p>
         )}
-        {assist?.possibleAreas && assist.possibleAreas.length > 0 && (
+        {step === 2 && assist?.possibleAreas && assist.possibleAreas.length > 0 && (
           <div className="mt-2">
             <span className="text-xs text-zinc-500">Areas (click to fill):</span>
-            <ChipList items={assist.possibleAreas.slice(0, 6)} onPick={onPickArea} />
+            <ChipList items={assist.possibleAreas.slice(0, 8)} onPick={onPickArea} />
           </div>
         )}
+
+        {step >= 3 && (assist?.roadSuggestions?.length ?? 0) > 0 && (
+          <div className="mt-2">
+            <span className="text-xs font-semibold text-indigo-700">
+              Road / Society (click to fill):
+            </span>
+            <ChipList items={assist.roadSuggestions ?? []} onPick={onPickRoad} />
+          </div>
+        )}
+
+        {step >= 4 && (assist?.landmarkSuggestions?.length ?? 0) > 0 && (
+          <div className="mt-2">
+            <span className="text-xs font-semibold text-indigo-700">Landmark (click to fill):</span>
+            <ChipList items={assist.landmarkSuggestions ?? []} onPick={onPickLandmark} />
+          </div>
+        )}
+
+        {step >= 3 && !(assist?.roadSuggestions?.length) && assistLoading && (
+          <p className="mt-2 animate-pulse text-xs text-indigo-600">
+            Road suggestions load thai rahya chhe…
+          </p>
+        )}
+
         <p className="mt-3 text-xs font-bold uppercase text-indigo-600">Next question</p>
         <p className="mt-1 text-lg font-medium">
           &ldquo;{assist?.suggestedNextQuestion ?? "Sir pincode 6 digit nakho…"}&rdquo;

@@ -38,6 +38,7 @@ export type LiveAssistResult = {
   possibleAreas: string[];
   nearbyServiceableLocations: string[];
   areaSuggestions: string[];
+  roadSuggestions: string[];
   landmarkSuggestions: string[];
   autocompleteSuggestions: string[];
   areaMatch: boolean | null;
@@ -140,8 +141,16 @@ export async function buildLiveAssist(input: LiveAssistInput): Promise<LiveAssis
 
   let possibleAreas = baseAreas;
   let areaSuggestions: string[] = [];
+  let roadSuggestions: string[] = [];
   let landmarkSuggestions: string[] = [];
   let autocompleteSuggestions: string[] = [];
+
+  const areaFilled = input.area.trim().length > 0;
+  const roadPhase =
+    input.activeField === "road" ||
+    (areaFilled && !input.landmark.trim() && input.activeField !== "landmark");
+  const landmarkPhase =
+    input.activeField === "landmark" || (areaFilled && input.roadSociety.trim() && !input.landmark.trim());
 
   if (input.activeField === "area" && input.area.trim().length >= 1) {
     areaSuggestions = fuzzyPick(baseAreas, input.area, 12);
@@ -150,23 +159,34 @@ export async function buildLiveAssist(input: LiveAssistInput): Promise<LiveAssis
       areaSuggestions = Array.from(new Set([...areaSuggestions, ...places])).slice(0, 10);
     }
     autocompleteSuggestions = areaSuggestions;
-  } else if (input.activeField === "landmark" && input.landmark.trim().length >= 1) {
-    landmarkSuggestions = fuzzyPick(landmarkCatalog, input.landmark, 10);
-    if (input.landmark.trim().length >= 2) {
-      const places = await placesAutocomplete(input.landmark, pin);
-      landmarkSuggestions = Array.from(new Set([...landmarkSuggestions, ...places])).slice(
-        0,
-        10
-      );
+  } else if (roadPhase && areaFilled) {
+    const local = fuzzyPick(
+      roadCatalog.length ? roadCatalog : [],
+      input.roadSociety.trim() || input.area,
+      10
+    );
+    const placesQuery = input.roadSociety.trim()
+      ? `${input.roadSociety}, ${input.area}, ${pin}`
+      : `${input.area}, ${detectedCity ?? ""} ${pin}`;
+    const places = await placesAutocomplete(placesQuery, pin);
+    roadSuggestions = Array.from(new Set([...local, ...places])).slice(0, 12);
+    if (roadSuggestions.length === 0) {
+      roadSuggestions = [
+        `${input.area} Road`,
+        `${input.area} Main Road`,
+        `${input.area} Society`,
+        `${input.area} Nagar`,
+      ];
     }
+    autocompleteSuggestions = roadSuggestions;
+  } else if (landmarkPhase) {
+    const local = fuzzyPick(landmarkCatalog, input.landmark.trim() || input.area, 10);
+    const placesQuery = input.landmark.trim()
+      ? `${input.landmark}, ${input.area}, ${pin}`
+      : `${input.area}, ${input.roadSociety}, ${pin}`.replace(/,\s*,/g, ",");
+    const places = await placesAutocomplete(placesQuery, pin);
+    landmarkSuggestions = Array.from(new Set([...local, ...places])).slice(0, 12);
     autocompleteSuggestions = landmarkSuggestions;
-  } else if (input.activeField === "road" && input.roadSociety.trim().length >= 1) {
-    const local = fuzzyPick(roadCatalog.length ? roadCatalog : baseAreas, input.roadSociety, 8);
-    const places =
-      input.roadSociety.trim().length >= 2
-        ? await placesAutocomplete(input.roadSociety, pin)
-        : [];
-    autocompleteSuggestions = Array.from(new Set([...local, ...places])).slice(0, 10);
   } else if (pincodeEngineReady) {
     possibleAreas = baseAreas;
   }
@@ -373,6 +393,7 @@ export async function buildLiveAssist(input: LiveAssistInput): Promise<LiveAssis
     possibleAreas,
     nearbyServiceableLocations,
     areaSuggestions,
+    roadSuggestions,
     landmarkSuggestions,
     autocompleteSuggestions,
     areaMatch,
