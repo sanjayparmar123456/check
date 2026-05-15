@@ -54,7 +54,16 @@ export async function postLiveAssist(body: {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
-  if (!res.ok) throw new Error("Assist API failed");
+  if (!res.ok) {
+    let detail = "";
+    try {
+      const err = (await res.json()) as { error?: string; detail?: string };
+      detail = err.error || err.detail || res.statusText;
+    } catch {
+      detail = res.statusText;
+    }
+    throw new Error(detail || "Assist API failed");
+  }
   return res.json();
 }
 

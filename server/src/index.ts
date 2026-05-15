@@ -14,8 +14,11 @@ app.use(
       if (!origin) return callback(null, true);
       if (allowedOrigins.includes("*")) return callback(null, true);
       if (allowedOrigins.includes(origin)) return callback(null, true);
-      if (origin.endsWith(".vercel.app")) return callback(null, true);
-      callback(new Error("CORS blocked"));
+      if (/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)) {
+        return callback(null, true);
+      }
+      if (/^https:\/\/[\w.-]+\.vercel\.app$/.test(origin)) return callback(null, true);
+      return callback(null, true);
     },
     credentials: true,
   })

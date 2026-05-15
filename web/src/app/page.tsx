@@ -48,10 +48,12 @@ export default function Home() {
         activeField: field,
       });
       setAssist(r);
-    } catch {
+    } catch (e) {
       setAssist(null);
       setAssistError(
-        "Live assist unavailable — start API (npm run dev in /server) or check API_URL on Vercel."
+        e instanceof Error
+          ? e.message
+          : "Live assist unavailable — run: cd server && npm run dev"
       );
     } finally {
       setAssistLoading(false);
