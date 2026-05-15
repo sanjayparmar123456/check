@@ -97,7 +97,7 @@ export async function buildLiveAssist(input: LiveAssistInput): Promise<LiveAssis
   const pincodeOk = pin.length === 6;
 
   const fb = pincodeFallback[pin];
-  const geo = pincodeOk ? await geocodePincode(pin) : null;
+  const geo = pincodeOk && !fb ? await geocodePincode(pin) : null;
 
   const detectedCity = fb?.city ?? geo?.city ?? null;
   const detectedState = fb?.state ?? geo?.state ?? null;
@@ -305,8 +305,10 @@ export async function buildLiveAssist(input: LiveAssistInput): Promise<LiveAssis
       ? `Pincode avg success ~${ratio(fb.pincodeStats.deliveredOrders, fb.pincodeStats.rtoOrders)}%.`
       : "No analytics yet.";
 
-  const llm =
-    pincodeOk && (input.activeField === "pincode" || input.area || input.landmark)
+  const needsLlm =
+    pincodeOk &&
+    (input.area.trim() || input.roadSociety.trim() || input.landmark.trim());
+  const llm = needsLlm
       ? await runAssistLlm({
           pincode: pin,
           city: detectedCity ?? undefined,

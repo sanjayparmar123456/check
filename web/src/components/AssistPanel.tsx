@@ -82,7 +82,13 @@ export function AssistPanel({
         <p className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-900">{assistError}</p>
       )}
 
-      {assist?.pincodeEngineReady && (
+      {assistLoading && !assist?.pincodeEngineReady && (
+        <p className="animate-pulse rounded-lg bg-indigo-50 px-3 py-2 text-sm text-indigo-700">
+          Pincode verify thai rahyu chhe…
+        </p>
+      )}
+
+      {(assist?.pincodeEngineReady || (assist?.detectedCity && assist?.possibleAreas?.length)) && (
         <div className="space-y-3 rounded-xl border border-indigo-100 bg-gradient-to-br from-indigo-50/80 to-white p-4 dark:border-indigo-900 dark:from-indigo-950/40 dark:to-zinc-950">
           <p className="text-xs font-bold uppercase tracking-wider text-indigo-600">
             Live Pincode Intelligence
@@ -134,8 +140,26 @@ export function AssistPanel({
       </div>
 
       <div className="rounded-xl border-2 border-indigo-200 bg-indigo-50/50 p-4 dark:border-indigo-800 dark:bg-indigo-950/30">
-        <p className="text-xs font-bold uppercase text-indigo-600">Suggested next question</p>
-        <p className="mt-1 text-lg font-medium">&ldquo;{assist?.suggestedNextQuestion ?? "…"}&rdquo;</p>
+        <p className="text-xs font-bold uppercase text-indigo-600">Suggested (auto)</p>
+        {assist?.detectedCity && (
+          <p className="mt-2 text-sm">
+            <span className="text-zinc-500">City: </span>
+            <span className="font-bold text-indigo-900 dark:text-indigo-100">
+              {assist.detectedCity}
+              {assist.detectedState ? `, ${assist.detectedState}` : ""}
+            </span>
+          </p>
+        )}
+        {assist?.possibleAreas && assist.possibleAreas.length > 0 && (
+          <div className="mt-2">
+            <span className="text-xs text-zinc-500">Areas (click to fill):</span>
+            <ChipList items={assist.possibleAreas.slice(0, 6)} onPick={onPickArea} />
+          </div>
+        )}
+        <p className="mt-3 text-xs font-bold uppercase text-indigo-600">Next question</p>
+        <p className="mt-1 text-lg font-medium">
+          &ldquo;{assist?.suggestedNextQuestion ?? "Sir pincode 6 digit nakho…"}&rdquo;
+        </p>
       </div>
 
       {liveSuggestions.length > 0 && (

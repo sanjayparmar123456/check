@@ -30,14 +30,22 @@ export default function Home() {
   const [assistError, setAssistError] = useState<string | null>(null);
   const [finalizeMsg, setFinalizeMsg] = useState<string | null>(null);
 
+  const pinDigits = pincode.replace(/\D/g, "");
+  const pinComplete = pinDigits.length === 6;
+
   const refreshAssist = useCallback(async () => {
+    if (pinDigits.length > 0 && pinDigits.length < 6 && activeField === "pincode") {
+      return;
+    }
     setAssistLoading(true);
     setAssistError(null);
     try {
       const field =
-        pincode.replace(/\D/g, "").length >= 6 && activeField === "none"
+        pinComplete && !area.trim() && !roadSociety.trim() && !landmark.trim()
           ? "pincode"
-          : activeField;
+          : activeField === "none" && pinComplete
+            ? "pincode"
+            : activeField;
       const r = await postLiveAssist({
         pincode,
         area,
@@ -58,14 +66,13 @@ export default function Home() {
     } finally {
       setAssistLoading(false);
     }
-  }, [pincode, area, roadSociety, landmark, houseNumber, statedCity, activeField]);
+  }, [pincode, pinDigits, pinComplete, area, roadSociety, landmark, houseNumber, statedCity, activeField]);
 
   useEffect(() => {
-    const delay =
-      activeField === "pincode" || pincode.replace(/\D/g, "").length >= 6 ? 180 : 320;
+    const delay = activeField === "pincode" || pinComplete ? 120 : 280;
     const t = window.setTimeout(() => void refreshAssist(), delay);
     return () => window.clearTimeout(t);
-  }, [refreshAssist, activeField, pincode]);
+  }, [refreshAssist, activeField, pincode, pinComplete]);
 
   const startSession = async () => {
     setSessionError(null);
