@@ -1,19 +1,36 @@
 export type ActiveField = "pincode" | "area" | "road" | "landmark" | "house" | "none";
 
+export type ValidationChecks = {
+  pincodeValid: boolean | null;
+  cityMatch: boolean | null;
+  areaExists: boolean | null;
+  landmarkExists: boolean | null;
+  addressComplete: boolean | null;
+  deliveryFeasible: boolean | null;
+};
+
 export type LiveAssistResponse = {
   pincodeMatch: boolean | null;
   detectedCity: string | null;
   detectedState: string | null;
   serviceable: boolean;
+  codAvailable: boolean;
+  deliveryAvailable: boolean;
   possibleAreas: string[];
+  nearbyServiceableLocations: string[];
+  areaSuggestions: string[];
+  landmarkSuggestions: string[];
   autocompleteSuggestions: string[];
   areaMatch: boolean | null;
   landmarkMatch: boolean | null;
   addressCompleteness: number;
   deliveryChance: number | null;
+  deliverySuccessRatio: number | null;
   riskLevel: "LOW" | "MEDIUM" | "HIGH";
   suggestedNextQuestion: string;
   riskMessages: string[];
+  validationChecks: ValidationChecks;
+  pincodeEngineReady: boolean;
   googleValidation: {
     verdict: string;
     formattedAddress?: string;
@@ -21,7 +38,6 @@ export type LiveAssistResponse = {
   } | null;
 };
 
-/** Same-origin `/api/*` — proxied to backend via next.config rewrites */
 const API = "/api";
 
 export async function postLiveAssist(body: {

@@ -14,9 +14,17 @@ export type LiveAssistInput = {
   roadSociety: string;
   landmark: string;
   houseNumber: string;
-  /** Optional: what the customer claimed as city (for mismatch alerts). */
   statedCity?: string;
   activeField: "pincode" | "area" | "road" | "landmark" | "house" | "none";
+};
+
+export type ValidationChecks = {
+  pincodeValid: boolean | null;
+  cityMatch: boolean | null;
+  areaExists: boolean | null;
+  landmarkExists: boolean | null;
+  addressComplete: boolean | null;
+  deliveryFeasible: boolean | null;
 };
 
 export type LiveAssistResult = {
@@ -24,15 +32,23 @@ export type LiveAssistResult = {
   detectedCity: string | null;
   detectedState: string | null;
   serviceable: boolean;
+  codAvailable: boolean;
+  deliveryAvailable: boolean;
   possibleAreas: string[];
+  nearbyServiceableLocations: string[];
+  areaSuggestions: string[];
+  landmarkSuggestions: string[];
   autocompleteSuggestions: string[];
   areaMatch: boolean | null;
   landmarkMatch: boolean | null;
   addressCompleteness: number;
   deliveryChance: number | null;
+  deliverySuccessRatio: number | null;
   riskLevel: "LOW" | "MEDIUM" | "HIGH";
   suggestedNextQuestion: string;
   riskMessages: string[];
+  validationChecks: ValidationChecks;
+  pincodeEngineReady: boolean;
   googleValidation: {
     verdict: string;
     formattedAddress?: string;
@@ -51,26 +67,29 @@ function areaKey(pincode: string, area: string) {
 function fuzzyPick(haystack: string[], needle: string, limit: number) {
   const n = norm(needle);
   if (!n) return haystack.slice(0, limit);
-  const scored = haystack
-    .map((h) => ({ h, s: norm(h) }))
-    .filter(({ s }) => s.includes(n) || n.split(" ").every((w) => w.length > 1 && s.includes(w)))
-    .map(({ h }) => h);
-  return scored.slice(0, limit);
+  return haystack
+    .filter((h) => {
+      const s = norm(h);
+      return (
+        s.includes(n) ||
+        n.split(" ").every((w) => w.length > 0 && s.includes(w))
+      );
+    })
+    .slice(0, limit);
 }
 
-function defaultNextQuestion(input: LiveAssistInput): string {
-  const p = input.pincode.replace(/\D/g, "");
-  if (p.length !== 6) return "Sir pincode 6 digit me confirm kijiye.";
-  if (!input.area.trim()) return "Sir area ya locality ka naam bataiye.";
-  if (!input.roadSociety.trim()) return "Sir society ya road ka naam bataiye.";
-  if (!input.landmark.trim()) return "Sir koi famous nearby landmark bataiye.";
-  if (!input.houseNumber.trim()) return "Sir flat / house number bataiye.";
-  return "Address almost complete — customer se ek baar poora repeat karwa lijiye.";
+function defaultNextQuestion(input: LiveAssistInput, pincodeOk: boolean): string {
+  if (!pincodeOk) return "Sir pincode confirm karo — 6 digit bolo.";
+  if (!input.area.trim()) return "Sir kaya area ma cho?";
+  if (!input.roadSociety.trim()) return "Sir road nu naam bolo.";
+  if (!input.landmark.trim()) return "Sir nearby landmark bolo.";
+  if (!input.houseNumber.trim()) return "Sir house number bolo.";
+  return "Sir poora address ek baar repeat karwa lijiye.";
 }
 
-function blendDeliveryFromRate(rate: number | null): number {
-  if (rate == null) return 88;
-  return Math.round(rate * 0.85 + 12);
+function ratio(delivered: number, rto: number): number {
+  const t = delivered + rto;
+  return t > 0 ? Math.round((delivered / t) * 100) : 91;
 }
 
 export async function buildLiveAssist(input: LiveAssistInput): Promise<LiveAssistResult> {
@@ -82,7 +101,8 @@ export async function buildLiveAssist(input: LiveAssistInput): Promise<LiveAssis
 
   const detectedCity = fb?.city ?? geo?.city ?? null;
   const detectedState = fb?.state ?? geo?.state ?? null;
-  const serviceable = fb?.serviceable ?? true;
+  const codAvailable = fb?.codAvailable ?? pincodeOk;
+  const deliveryAvailable = (fb?.serviceable ?? true) && pincodeOk;
 
   const dbLocals = pincodeOk
     ? await safeDbQuery(
@@ -98,47 +118,58 @@ export async function buildLiveAssist(input: LiveAssistInput): Promise<LiveAssis
   const baseAreas = Array.from(
     new Set([...(fb?.areas ?? []), ...dbLocals.map((l) => l.locality)])
   );
+  const nearbyServiceableLocations = fb?.nearbyServiceable ?? [];
+  const landmarkCatalog = fb?.landmarks ?? [];
+  const roadCatalog = fb?.roads ?? [];
+
+  const pincodeEngineReady = pincodeOk && (!!fb || !!geo);
 
   let possibleAreas = baseAreas;
-  if (input.activeField === "pincode" && pincodeOk) {
-    possibleAreas = baseAreas;
-  } else if (input.activeField === "area") {
-    possibleAreas = fuzzyPick(baseAreas, input.area, 12);
-  }
-
+  let areaSuggestions: string[] = [];
+  let landmarkSuggestions: string[] = [];
   let autocompleteSuggestions: string[] = [];
-  if (input.activeField === "area" && input.area.trim().length >= 2) {
-    const local = fuzzyPick(baseAreas, input.area, 8);
-    const places = await placesAutocomplete(input.area, pin);
-    autocompleteSuggestions = Array.from(new Set([...local, ...places])).slice(0, 10);
-  } else if (input.activeField === "road" || input.activeField === "landmark") {
-    const q =
-      input.activeField === "road"
-        ? input.roadSociety || input.area
-        : input.landmark || input.roadSociety || input.area;
-    if (q.trim().length >= 2) {
-      autocompleteSuggestions = await placesAutocomplete(q, pin);
+
+  if (input.activeField === "area" && input.area.trim().length >= 1) {
+    areaSuggestions = fuzzyPick(baseAreas, input.area, 12);
+    if (input.area.trim().length >= 2) {
+      const places = await placesAutocomplete(input.area, pin);
+      areaSuggestions = Array.from(new Set([...areaSuggestions, ...places])).slice(0, 10);
     }
+    autocompleteSuggestions = areaSuggestions;
+  } else if (input.activeField === "landmark" && input.landmark.trim().length >= 1) {
+    landmarkSuggestions = fuzzyPick(landmarkCatalog, input.landmark, 10);
+    if (input.landmark.trim().length >= 2) {
+      const places = await placesAutocomplete(input.landmark, pin);
+      landmarkSuggestions = Array.from(new Set([...landmarkSuggestions, ...places])).slice(
+        0,
+        10
+      );
+    }
+    autocompleteSuggestions = landmarkSuggestions;
+  } else if (input.activeField === "road" && input.roadSociety.trim().length >= 1) {
+    const local = fuzzyPick(roadCatalog.length ? roadCatalog : baseAreas, input.roadSociety, 8);
+    const places =
+      input.roadSociety.trim().length >= 2
+        ? await placesAutocomplete(input.roadSociety, pin)
+        : [];
+    autocompleteSuggestions = Array.from(new Set([...local, ...places])).slice(0, 10);
+  } else if (pincodeEngineReady) {
+    possibleAreas = baseAreas;
   }
 
   const areaMatch =
     input.area.trim().length === 0
       ? null
-      : baseAreas.some((a) => norm(a) === norm(input.area));
+      : baseAreas.some((a) => norm(a) === norm(input.area) || norm(a).includes(norm(input.area)));
 
   const landmarkMatch =
     input.landmark.trim().length === 0
       ? null
-      : autocompleteSuggestions.length > 0
-        ? autocompleteSuggestions.some((s) => norm(s).includes(norm(input.landmark)))
-        : null;
+      : landmarkCatalog.some((l) => norm(l).includes(norm(input.landmark))) ||
+        landmarkSuggestions.some((s) => norm(s).includes(norm(input.landmark)));
 
   let googleValidation: LiveAssistResult["googleValidation"] = null;
-  if (
-    pincodeOk &&
-    input.area.trim() &&
-    (input.roadSociety.trim() || input.landmark.trim())
-  ) {
+  if (pincodeOk && input.area.trim() && (input.roadSociety.trim() || input.landmark.trim())) {
     const gv = await validateAddressStructured({
       regionCode: "IN",
       postalCode: pin,
@@ -181,20 +212,28 @@ export async function buildLiveAssist(input: LiveAssistInput): Promise<LiveAssis
   let deliveryRate: number | null = null;
   if (stats && stats.deliveredOrders + stats.rtoOrders > 0) {
     deliveryRate = stats.deliveredOrders / (stats.deliveredOrders + stats.rtoOrders);
+  } else if (fb?.pincodeStats && pincodeOk) {
+    deliveryRate =
+      fb.pincodeStats.deliveredOrders /
+      (fb.pincodeStats.deliveredOrders + fb.pincodeStats.rtoOrders);
   }
 
-  let deliveryChance: number | null = blendDeliveryFromRate(deliveryRate);
+  let deliveryChance: number | null =
+    deliveryRate != null ? Math.round(deliveryRate * 100) : pincodeOk ? 91 : null;
+  let deliverySuccessRatio = deliveryChance;
+
   let riskLevel: LiveAssistResult["riskLevel"] = "LOW";
   const riskMessages: string[] = [];
 
   if (!pincodeOk) {
     riskLevel = "HIGH";
-    riskMessages.push("Pincode invalid — 6 digits required.");
+    riskMessages.push("⚠️ Pincode invalid — 6 digits required.");
     deliveryChance = null;
+    deliverySuccessRatio = null;
   }
 
   if (pincodeOk && !fb && !geo) {
-    riskMessages.push("Pincode not verified against India dataset / maps — double-check with customer.");
+    riskMessages.push("⚠️ Pincode not in dataset — double-check with customer.");
     riskLevel = "MEDIUM";
   }
 
@@ -202,26 +241,30 @@ export async function buildLiveAssist(input: LiveAssistInput): Promise<LiveAssis
     if (norm(input.statedCity) !== norm(detectedCity)) {
       riskLevel = "HIGH";
       riskMessages.push(
-        `${pin} belongs to ${detectedCity}, not ${input.statedCity} — mismatch risk.`
+        `⚠️ ${pin} belongs to ${detectedCity}, not ${input.statedCity}.`
       );
     }
   }
 
   if (pincodeOk && input.area.trim() && baseAreas.length && areaMatch === false) {
     riskLevel = riskLevel === "HIGH" ? "HIGH" : "MEDIUM";
-    riskMessages.push("Area not in known locality list for this pincode — confirm spelling.");
+    riskMessages.push("⚠️ Area not found in known list for this pincode.");
   }
 
   if (deliveryRate != null && deliveryRate < 0.75) {
     riskLevel = "HIGH";
-    riskMessages.push("Historically high RTO in this micro-area — extra verification recommended.");
+    riskMessages.push("⚠️ High RTO area — extra verification recommended.");
   } else if (deliveryRate != null && deliveryRate < 0.88) {
     riskLevel = riskLevel === "HIGH" ? "HIGH" : "MEDIUM";
-    riskMessages.push("Mixed delivery performance in this area.");
+    riskMessages.push("⚠️ Mixed delivery performance in this area.");
   }
 
   if (!input.houseNumber.trim() && input.area.trim() && input.roadSociety.trim()) {
-    riskMessages.push("House number missing — COD risk.");
+    riskMessages.push("⚠️ House number missing.");
+  }
+
+  if (!input.landmark.trim() && input.roadSociety.trim()) {
+    riskMessages.push("⚠️ Landmark missing — delivery risk.");
   }
 
   const completenessFields = [
@@ -235,33 +278,59 @@ export async function buildLiveAssist(input: LiveAssistInput): Promise<LiveAssis
     (completenessFields.filter(Boolean).length / completenessFields.length) * 100
   );
 
+  const cityMatch =
+    input.statedCity?.trim() && detectedCity
+      ? norm(input.statedCity) === norm(detectedCity)
+      : pincodeOk
+        ? true
+        : null;
+
+  const validationChecks: ValidationChecks = {
+    pincodeValid: pincodeOk ? true : pin.length > 0 ? false : null,
+    cityMatch,
+    areaExists: input.area.trim() ? areaMatch : null,
+    landmarkExists: input.landmark.trim() ? landmarkMatch : null,
+    addressComplete: addressCompleteness >= 80 ? true : addressCompleteness > 0 ? false : null,
+    deliveryFeasible: pincodeOk ? deliveryAvailable : null,
+  };
+
   if (googleValidation?.verdict === "FIX") {
     riskLevel = riskLevel === "LOW" ? "MEDIUM" : riskLevel;
-    riskMessages.push("Google Address Validation flagged possible issues.");
+    riskMessages.push("⚠️ Google Address Validation flagged issues.");
   }
 
   const analyticsSnippet = stats
-    ? `Area analytics: ${stats.areaLabel} — delivered ${stats.deliveredOrders}, RTO ${stats.rtoOrders}.`
-    : "No historical analytics row for this exact area yet.";
+    ? `Area: ${stats.areaLabel} — delivered ${stats.deliveredOrders}, RTO ${stats.rtoOrders}.`
+    : fb?.pincodeStats
+      ? `Pincode avg success ~${ratio(fb.pincodeStats.deliveredOrders, fb.pincodeStats.rtoOrders)}%.`
+      : "No analytics yet.";
 
-  const llm = await runAssistLlm({
-    pincode: pin,
-    city: detectedCity ?? undefined,
-    state: detectedState ?? undefined,
-    area: input.area,
-    roadSociety: input.roadSociety,
-    landmark: input.landmark,
-    houseNumber: input.houseNumber,
-    analyticsSnippet,
-    rulesFromSystem: riskMessages,
-  });
+  const llm =
+    pincodeOk && (input.activeField === "pincode" || input.area || input.landmark)
+      ? await runAssistLlm({
+          pincode: pin,
+          city: detectedCity ?? undefined,
+          state: detectedState ?? undefined,
+          area: input.area,
+          roadSociety: input.roadSociety,
+          landmark: input.landmark,
+          houseNumber: input.houseNumber,
+          analyticsSnippet,
+          rulesFromSystem: riskMessages,
+        })
+      : null;
 
-  const suggestedNextQuestion =
-    llm?.suggestedNextQuestion?.trim() || defaultNextQuestion(input);
+  let suggestedNextQuestion =
+    llm?.suggestedNextQuestion?.trim() || defaultNextQuestion(input, pincodeOk);
+
+  if (pincodeOk && !input.area.trim() && !llm?.suggestedNextQuestion) {
+    suggestedNextQuestion = "Sir kaya area ma cho?";
+  }
 
   if (llm?.riskNotes?.length) {
     for (const n of llm.riskNotes) {
-      if (!riskMessages.includes(n)) riskMessages.push(n);
+      const msg = n.startsWith("⚠️") ? n : `⚠️ ${n}`;
+      if (!riskMessages.includes(msg)) riskMessages.push(msg);
     }
   }
   if (typeof llm?.deliveryChanceHint === "number") {
@@ -269,24 +338,33 @@ export async function buildLiveAssist(input: LiveAssistInput): Promise<LiveAssis
       deliveryChance == null
         ? llm.deliveryChanceHint
         : Math.round((deliveryChance + llm.deliveryChanceHint) / 2);
+    deliverySuccessRatio = deliveryChance;
   }
   if (llm?.riskLevelHint === "HIGH") riskLevel = "HIGH";
   else if (llm?.riskLevelHint === "MEDIUM" && riskLevel === "LOW") riskLevel = "MEDIUM";
 
   return {
-    pincodeMatch: pincodeOk ? true : false,
+    pincodeMatch: pincodeOk ? true : pin.length > 0 ? false : null,
     detectedCity,
     detectedState,
-    serviceable: serviceable && pincodeOk,
+    serviceable: deliveryAvailable,
+    codAvailable: codAvailable && pincodeOk,
+    deliveryAvailable,
     possibleAreas,
+    nearbyServiceableLocations,
+    areaSuggestions,
+    landmarkSuggestions,
     autocompleteSuggestions,
     areaMatch,
     landmarkMatch,
     addressCompleteness,
     deliveryChance,
+    deliverySuccessRatio,
     riskLevel,
     suggestedNextQuestion,
     riskMessages,
+    validationChecks,
+    pincodeEngineReady,
     googleValidation,
   };
 }
