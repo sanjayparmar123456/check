@@ -6,6 +6,7 @@ import {
   placesAutocomplete,
   validateAddressStructured,
 } from "../lib/googleMaps.js";
+import { lookupIndiaPincode } from "../lib/indiaPost.js";
 import { runAssistLlm } from "../lib/openaiAssist.js";
 
 export type LiveAssistInput = {
@@ -97,12 +98,21 @@ export async function buildLiveAssist(input: LiveAssistInput): Promise<LiveAssis
   const pincodeOk = pin.length === 6;
 
   const fb = pincodeFallback[pin];
-  const geo = pincodeOk && !fb ? await geocodePincode(pin) : null;
 
-  const detectedCity = fb?.city ?? geo?.city ?? null;
-  const detectedState = fb?.state ?? geo?.state ?? null;
-  const codAvailable = fb?.codAvailable ?? pincodeOk;
-  const deliveryAvailable = (fb?.serviceable ?? true) && pincodeOk;
+  let indiaPost = null;
+  let geo = null;
+  if (pincodeOk && !fb) {
+    [indiaPost, geo] = await Promise.all([lookupIndiaPincode(pin), geocodePincode(pin)]);
+  } else if (pincodeOk && fb) {
+    indiaPost = await lookupIndiaPincode(pin);
+  }
+
+  const detectedCity = fb?.city ?? indiaPost?.city ?? geo?.city ?? null;
+  const detectedState = fb?.state ?? indiaPost?.state ?? geo?.state ?? null;
+  const codAvailable = fb?.codAvailable ?? (pincodeOk && (indiaPost?.valid || !!geo));
+  const deliveryAvailable =
+    pincodeOk &&
+    (fb != null ? fb.serviceable : indiaPost?.valid === true || !!geo);
 
   const dbLocals = pincodeOk
     ? await safeDbQuery(
@@ -116,13 +126,17 @@ export async function buildLiveAssist(input: LiveAssistInput): Promise<LiveAssis
     : [];
 
   const baseAreas = Array.from(
-    new Set([...(fb?.areas ?? []), ...dbLocals.map((l) => l.locality)])
+    new Set([
+      ...(fb?.areas ?? []),
+      ...(indiaPost?.areas ?? []),
+      ...dbLocals.map((l) => l.locality),
+    ])
   );
   const nearbyServiceableLocations = fb?.nearbyServiceable ?? [];
   const landmarkCatalog = fb?.landmarks ?? [];
   const roadCatalog = fb?.roads ?? [];
 
-  const pincodeEngineReady = pincodeOk && (!!fb || !!geo);
+  const pincodeEngineReady = pincodeOk && (!!fb || !!indiaPost?.valid || !!geo);
 
   let possibleAreas = baseAreas;
   let areaSuggestions: string[] = [];
@@ -232,9 +246,13 @@ export async function buildLiveAssist(input: LiveAssistInput): Promise<LiveAssis
     deliverySuccessRatio = null;
   }
 
-  if (pincodeOk && !fb && !geo) {
-    riskMessages.push("⚠️ Pincode not in dataset — double-check with customer.");
-    riskLevel = "MEDIUM";
+  if (pincodeOk && !fb && !indiaPost?.valid && !geo) {
+    riskMessages.push("⚠️ Pincode not found — customer સાથે confirm karo.");
+    riskLevel = "HIGH";
+    deliveryChance = null;
+    deliverySuccessRatio = null;
+  } else if (pincodeOk && !fb && indiaPost?.valid) {
+    riskMessages.push(`ℹ️ ${indiaPost.areas.length} localities found for this pincode.`);
   }
 
   if (input.statedCity?.trim() && detectedCity) {

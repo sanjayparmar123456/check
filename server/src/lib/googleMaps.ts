@@ -24,8 +24,12 @@ export async function geocodePincode(pincode: string): Promise<GeocodeResult | n
   let city: string | undefined;
   let state: string | undefined;
   for (const c of components) {
-    if (c.types.includes("locality") || c.types.includes("postal_town")) {
-      city = c.long_name;
+    if (
+      c.types.includes("locality") ||
+      c.types.includes("postal_town") ||
+      c.types.includes("administrative_area_level_2")
+    ) {
+      city = city ?? c.long_name;
     }
     if (c.types.includes("administrative_area_level_1")) {
       state = c.long_name;
