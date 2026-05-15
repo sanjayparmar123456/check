@@ -1,4 +1,6 @@
 import type { ActiveField, LiveAssistResponse } from "@/lib/api";
+import { StepByStepAreas } from "@/components/StepByStepAreas";
+import type { WizardStep } from "@/components/CallerStepGuide";
 
 function ChipList({
   items,
@@ -40,6 +42,7 @@ export function AssistPanel({
   assistLoading,
   assistError,
   activeField,
+  step,
   onPickArea,
   onPickRoad,
   onPickLandmark,
@@ -48,6 +51,7 @@ export function AssistPanel({
   assistLoading: boolean;
   assistError: string | null;
   activeField: ActiveField;
+  step: WizardStep;
   onPickArea: (v: string) => void;
   onPickRoad: (v: string) => void;
   onPickLandmark: (v: string) => void;
@@ -102,8 +106,14 @@ export function AssistPanel({
           </div>
 
           <div>
-            <span className="text-xs font-semibold text-zinc-600">Areas</span>
-            <ChipList items={assist.possibleAreas} onPick={onPickArea} />
+            <span className="text-xs font-semibold text-zinc-600">
+              Areas — caller ne step by step બતાવો
+            </span>
+            <StepByStepAreas
+              areas={assist.possibleAreas}
+              onPick={onPickArea}
+              active={step === 2}
+            />
           </div>
 
           {assist.nearbyServiceableLocations.length > 0 && (
