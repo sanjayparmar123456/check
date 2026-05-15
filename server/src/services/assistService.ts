@@ -146,12 +146,6 @@ export async function buildLiveAssist(input: LiveAssistInput): Promise<LiveAssis
   let autocompleteSuggestions: string[] = [];
 
   const areaFilled = input.area.trim().length > 0;
-  const roadPhase =
-    input.activeField === "road" ||
-    (areaFilled && !input.landmark.trim() && input.activeField !== "landmark");
-  const landmarkPhase =
-    input.activeField === "landmark" || (areaFilled && input.roadSociety.trim() && !input.landmark.trim());
-
   if (input.activeField === "area" && input.area.trim().length >= 1) {
     areaSuggestions = fuzzyPick(baseAreas, input.area, 12);
     if (input.area.trim().length >= 2) {
@@ -159,33 +153,47 @@ export async function buildLiveAssist(input: LiveAssistInput): Promise<LiveAssis
       areaSuggestions = Array.from(new Set([...areaSuggestions, ...places])).slice(0, 10);
     }
     autocompleteSuggestions = areaSuggestions;
-  } else if (roadPhase && areaFilled) {
-    const local = fuzzyPick(
-      roadCatalog.length ? roadCatalog : [],
-      input.roadSociety.trim() || input.area,
-      10
-    );
-    const placesQuery = input.roadSociety.trim()
-      ? `${input.roadSociety}, ${input.area}, ${pin}`
+  } else if (input.activeField === "road" && areaFilled) {
+    const typed = input.roadSociety.trim();
+    const seeds = [
+      ...roadCatalog,
+      `${input.area} Road`,
+      `${input.area} Main Road`,
+      `${input.area} Society`,
+      `${input.area} Nagar`,
+    ];
+    const local = fuzzyPick(seeds, typed || input.area, 12);
+    const placesQuery = typed
+      ? `${typed}, ${input.area}, ${detectedCity ?? ""} ${pin}`
       : `${input.area}, ${detectedCity ?? ""} ${pin}`;
     const places = await placesAutocomplete(placesQuery, pin);
-    roadSuggestions = Array.from(new Set([...local, ...places])).slice(0, 12);
-    if (roadSuggestions.length === 0) {
-      roadSuggestions = [
-        `${input.area} Road`,
-        `${input.area} Main Road`,
-        `${input.area} Society`,
-        `${input.area} Nagar`,
-      ];
+    roadSuggestions = Array.from(new Set([...local, ...places]))
+      .filter((s) => {
+        if (!typed) return true;
+        const t = norm(typed);
+        const sn = norm(s);
+        return sn.includes(t) || t.split(" ").every((w) => w.length > 0 && sn.includes(w));
+      })
+      .slice(0, 12);
+    if (roadSuggestions.length === 0 && typed) {
+      roadSuggestions = fuzzyPick(seeds, typed, 8);
     }
     autocompleteSuggestions = roadSuggestions;
-  } else if (landmarkPhase) {
-    const local = fuzzyPick(landmarkCatalog, input.landmark.trim() || input.area, 10);
-    const placesQuery = input.landmark.trim()
-      ? `${input.landmark}, ${input.area}, ${pin}`
+  } else if (input.activeField === "landmark" && areaFilled) {
+    const typed = input.landmark.trim();
+    const local = fuzzyPick(landmarkCatalog, typed || input.area, 10);
+    const placesQuery = typed
+      ? `${typed}, ${input.area}, ${pin}`
       : `${input.area}, ${input.roadSociety}, ${pin}`.replace(/,\s*,/g, ",");
     const places = await placesAutocomplete(placesQuery, pin);
-    landmarkSuggestions = Array.from(new Set([...local, ...places])).slice(0, 12);
+    landmarkSuggestions = Array.from(new Set([...local, ...places]))
+      .filter((s) => {
+        if (!typed) return true;
+        const t = norm(typed);
+        const sn = norm(s);
+        return sn.includes(t) || t.split(" ").every((w) => w.length > 0 && sn.includes(w));
+      })
+      .slice(0, 12);
     autocompleteSuggestions = landmarkSuggestions;
   } else if (pincodeEngineReady) {
     possibleAreas = baseAreas;

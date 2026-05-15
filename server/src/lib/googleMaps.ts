@@ -47,7 +47,7 @@ export async function placesAutocomplete(
   pincode?: string
 ): Promise<string[]> {
   const key = env.googleMapsApiKey;
-  if (!key || input.trim().length < 2) return [];
+  if (!key || input.trim().length < 1) return [];
 
   const body = {
     input: pincode ? `${input}, ${pincode} India` : `${input} India`,

@@ -64,9 +64,10 @@ export default function Home() {
     setAssistError(null);
     try {
       let field = activeField;
-      if (pinComplete && !area.trim()) field = "pincode";
-      else if (area.trim() && activeField !== "area" && activeField !== "landmark") field = "road";
-      else if (activeField === "none" && pinComplete) field = "pincode";
+      if (field === "none") {
+        if (pinComplete && !area.trim()) field = "pincode";
+        else if (area.trim()) field = "road";
+      }
       const r = await postLiveAssist({
         pincode,
         area,
@@ -92,10 +93,11 @@ export default function Home() {
   }, [pincode, pinDigits, pinComplete, area, roadSociety, landmark, houseNumber, city, activeField]);
 
   useEffect(() => {
-    const delay = activeField === "pincode" || pinComplete ? 120 : 280;
+    const typing = activeField === "area" || activeField === "road" || activeField === "landmark";
+    const delay = activeField === "pincode" || pinComplete ? 120 : typing ? 150 : 280;
     const t = window.setTimeout(() => void refreshAssist(), delay);
     return () => window.clearTimeout(t);
-  }, [refreshAssist, activeField, pincode, pinComplete]);
+  }, [refreshAssist, activeField, pincode, pinComplete, area, roadSociety, landmark]);
 
   const pickArea = (v: string) => {
     setArea(v);
@@ -269,7 +271,10 @@ export default function Home() {
             <input
               className={fieldClass(step >= 3)}
               value={roadSociety}
-              onChange={(e) => setRoadSociety(e.target.value)}
+              onChange={(e) => {
+                setRoadSociety(e.target.value);
+                setActiveField("road");
+              }}
               onFocus={() => setActiveField("road")}
               disabled={step < 3}
             />
@@ -280,7 +285,10 @@ export default function Home() {
             <input
               className={fieldClass(step >= 4)}
               value={landmark}
-              onChange={(e) => setLandmark(e.target.value)}
+              onChange={(e) => {
+                setLandmark(e.target.value);
+                setActiveField("landmark");
+              }}
               onFocus={() => setActiveField("landmark")}
               disabled={step < 4}
             />

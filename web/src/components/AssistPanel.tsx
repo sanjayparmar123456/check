@@ -68,7 +68,12 @@ export function AssistPanel({
       ? assist?.landmarkSuggestions ?? []
       : activeField === "area"
         ? assist?.areaSuggestions ?? []
-        : assist?.autocompleteSuggestions ?? [];
+        : activeField === "road"
+          ? assist?.roadSuggestions ?? assist?.autocompleteSuggestions ?? []
+          : assist?.autocompleteSuggestions ?? [];
+
+  const showRoadInSuggested =
+    (step >= 3 || activeField === "road") && (assist?.roadSuggestions?.length ?? 0) > 0;
 
   return (
     <section className="space-y-4 rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-950">
@@ -167,12 +172,14 @@ export function AssistPanel({
           </div>
         )}
 
-        {step >= 3 && (assist?.roadSuggestions?.length ?? 0) > 0 && (
+        {showRoadInSuggested && (
           <div className="mt-2">
             <span className="text-xs font-semibold text-indigo-700">
-              Road / Society (click to fill):
+              {activeField === "road"
+                ? "Road / Society — live (type karo, filter thase):"
+                : "Road / Society (click to fill):"}
             </span>
-            <ChipList items={assist.roadSuggestions ?? []} onPick={onPickRoad} />
+            <ChipList items={assist?.roadSuggestions ?? []} onPick={onPickRoad} />
           </div>
         )}
 
@@ -202,7 +209,9 @@ export function AssistPanel({
               ? "Live landmark suggestions"
               : activeField === "area"
                 ? "Live area suggestions"
-                : "Live suggestions"}
+                : activeField === "road"
+                  ? "Live road suggestions"
+                  : "Live suggestions"}
           </p>
           <ChipList
             items={liveSuggestions}
